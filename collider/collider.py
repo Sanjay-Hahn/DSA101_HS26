@@ -2,6 +2,9 @@ import numpy as np
 import time
 from dataclasses import dataclass
 
+import matplotlib.pyplot as plt
+from IPython.display import display, clear_output
+
 from ipycanvas import Canvas, hold_canvas
 
 
@@ -182,6 +185,7 @@ class Simulation:
         self.canvas = canvas(width=width, height=height)
         self.spheres = self.create_spheres(num_spheres)
         self.walls = self.create_side_walls()
+        self.n_collisions = 0
 
     def create_spheres(self, num_spheres):
         spheres = []
@@ -211,6 +215,10 @@ class Simulation:
                 wall.check_collision(sphere)
             for other in self.spheres:
                 if sphere != other:
+                    distance = np.sqrt((sphere.x - other.x)**2 + (sphere.y - other.y)**2)   
+                    approaching = (sphere.x - other.x)*(sphere.vx - other.vx) + (sphere.y - other.y)*(sphere.vy - other.vy) < 0
+                    if distance < sphere.radius + other.radius and sphere.x > 0 and approaching:          
+                        self.n_collisions += 1                                           
                     sphere.check_sphere_collision(other)
 
             sphere.equilibriate_temperature(self.temperature)
@@ -239,3 +247,54 @@ class Simulation:
             self.update()
             self.draw()
             time.sleep(0.002)
+
+    def run_with_charts(self, n_steps=3000, plot_every=25):
+        """Run the simulation and show live charts of collisions, reactants and products."""
+        times = []
+        collisions_per_interval = []
+        reactants = []
+        products = []
+        collisions_before = 0
+
+        for step in range(n_steps):
+            self.update()
+            self.draw()
+
+            if step % plot_every == 0:
+                # count particles inside the box by type
+                n_reactants = 0
+                n_products = 0
+                for sphere in self.spheres:
+                    if 0 <= sphere.x <= self.width:
+                        if sphere.atom.name == "NO":
+                            n_products += 1
+                        else:
+                            n_reactants += 1
+
+                # collisions since the last data point
+                new_collisions = self.n_collisions - collisions_before
+                collisions_before = self.n_collisions
+
+                times.append(step)
+                reactants.append(n_reactants)
+                products.append(n_products)
+                collisions_per_interval.append(new_collisions)
+
+                #draw the charts
+                fig, axs = plt.subplots(1, 2, figsize=(10, 3.5))
+                axs[0].plot(times, collisions_per_interval, color="grey")
+                axs[0].set_xlabel("time (steps)")
+                axs[0].set_ylabel(f"collisions per {plot_every} steps")
+                axs[1].plot(times, reactants, label="reactants (N + O)", color="#1e88e5")
+                axs[1].plot(times, products, label="product (NO)", color="#1abc9c")
+                axs[1].set_xlabel("time (steps)")
+                axs[1].set_ylabel("number of particles")
+                axs[1].legend()
+                plt.tight_layout()
+
+                clear_output(wait = True)
+                display(fig)
+                plt.close(fig)
+
+
+
